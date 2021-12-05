@@ -16,6 +16,7 @@
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
@@ -38,10 +39,21 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  /*get file name*/
+  char *name, *save_ptr;
+  name = strtok_r(file_name, " ", &save_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+
+    /*add new thread to parent thread's child*/
+    struct thread *child = find_by_tid(tid);
+    struct thread *cur = thread_current();
+    sema_init(&cur->wait,0);
+    cur->child = child;
+    child->parent = cur;
   return tid;
 }
 
@@ -53,6 +65,13 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+  /* parsing file name and input*/
+  int count = 0;
+  char *token, *save_ptr;
+  char *args[25];
+   for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
+     args[count++] = token;
+   }
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -61,7 +80,37 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
+
+  /*creating stack*/
+  int len;
+  int args_addr[count];
+  void **esp = &if_.esp;
+  // for (int i = 0; i < count; i++)
+  for (int i = count-1; i >=0; i--)
+  {
+    len = strlen(args[i])+1;
+    *esp -= len;
+    memcpy(*esp,args[i],len);
+    args_addr[i] = (int)*esp;
+  }
+  *esp = (int)*esp & 0xfffffffc;
+  *esp -=4;
+  *(int*)*esp = 0;
+
+  for(int i = count-1;i>=0;i--){
+    *esp -= 4;
+    *(int*)*esp = args_addr[i];
+  }
+  *esp -= 4;
+  *(int*)*esp = *(esp)+4;
+  *esp -= 4;
+  *(int*)*esp = count;
+  *esp -= 4;
+  *(int*)*esp = 0;
   /* If load failed, quit. */
+  // hex_dump(if_.esp , if_.esp , PHYS_BASE-if_.esp , true);
+  // printf("esp - %p",if_.esp);
+
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
@@ -88,6 +137,12 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  // for (size_t i = 0; i < 100000000000; i++){}
+  struct thread *cur = thread_current();
+  struct thread *child = cur->child;
+  if (child->status != THREAD_DYING){
+    sema_down(&cur->wait);
+  }
   return -1;
 }
 
