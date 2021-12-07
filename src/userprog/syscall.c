@@ -37,7 +37,7 @@ void sys_open(char *name, struct intr_frame *f);
 void sys_close(int fd_, struct intr_frame *f);
 void sys_filesize(int fd_, struct intr_frame *f);
 void sys_seek(int fd_, int cnt, struct intr_frame *f UNUSED);
-void sys_tell(int fd_,struct intr_frame *f);
+void sys_tell(int fd_, struct intr_frame *f);
 void sys_remove(char *name, struct intr_frame *f);
 void syscall_init(void)
 {
@@ -126,31 +126,31 @@ syscall_handler(struct intr_frame *f)
   }
   case SYS_REMOVE:
   {
-    char * name;
-      read_mem(&name,esp+4,sizeof(name));
-      sys_remove(name,f);
-      break;
+    char *name;
+    read_mem(&name, esp + 4, sizeof(name));
+    sys_remove(name, f);
+    break;
   }
   case SYS_FILESIZE:
   {
     int fd;
-    read_mem(&fd,esp+4,sizeof(fd));
-    sys_filesize(fd,f);
+    read_mem(&fd, esp + 4, sizeof(fd));
+    sys_filesize(fd, f);
     break;
   }
   case SYS_SEEK:
   {
     int fd, cnt;
-    read_mem(&fd,esp+4,sizeof(fd));
-    read_mem(&cnt,esp+8,sizeof(cnt));
+    read_mem(&fd, esp + 4, sizeof(fd));
+    read_mem(&cnt, esp + 8, sizeof(cnt));
     sys_seek(fd, cnt, f);
     break;
   }
   case SYS_TELL:
   {
     int fd;
-    read_mem(&fd,esp+4,sizeof(fd));
-    sys_tell(fd,f);
+    read_mem(&fd, esp + 4, sizeof(fd));
+    sys_tell(fd, f);
     break;
   }
   default:
@@ -229,7 +229,7 @@ void sys_close(int fd_, struct intr_frame *f UNUSED)
   if (!list_empty(&cur->file_list))
   {
     lock_acquire(&memory_lock);
-    for(e=list_front(&cur->file_list); e != list_end(&cur->file_list) ; e=list_next(e))
+    for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
     {
       fd = list_entry(e, struct filedesc, elem);
       if (fd->fd_num == fd_)
@@ -272,7 +272,7 @@ void sys_write(int fd_, void *buffer, int size, struct intr_frame *f)
     struct thread *cur = thread_current();
     if (!list_empty(&cur->file_list))
     {
-      for(e=list_front(&cur->file_list); e != list_end(&cur->file_list) ; e=list_next(e))
+      for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
       {
         fd = list_entry(e, struct filedesc, elem);
         if (fd->fd_num == fd_)
@@ -324,7 +324,7 @@ void sys_read(int fd_, void *buffer, int size, struct intr_frame *f)
     struct thread *cur = thread_current();
     if (!list_empty(&cur->file_list))
     {
-      for(e=list_front(&cur->file_list); e != list_end(&cur->file_list) ; e=list_next(e))
+      for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
       {
         fd = list_entry(e, struct filedesc, elem);
         if (fd->fd_num == fd_)
@@ -343,100 +343,96 @@ void sys_read(int fd_, void *buffer, int size, struct intr_frame *f)
     lock_release(&memory_lock);
   }
 }
-void
-sys_filesize(int fd_, struct intr_frame *f)
+void sys_filesize(int fd_, struct intr_frame *f)
 {
   struct list_elem *e;
-  struct filedesc *fd=NULL;
+  struct filedesc *fd = NULL;
   struct thread *cur = thread_current();
-  if(!list_empty(&cur->file_list))
+  if (!list_empty(&cur->file_list))
   {
     lock_acquire(&memory_lock);
-    for(e=list_front(&cur->file_list); e != list_end(&cur->file_list) ; e=list_next(e))
+    for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
     {
       fd = list_entry(e, struct filedesc, elem);
-      if(fd->fd_num == fd_)
-       break;
-      if(e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
+      if (fd->fd_num == fd_)
+        break;
+      if (e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
       {
         lock_release(&memory_lock);
-        f->eax=-1;
+        f->eax = -1;
         return;
       }
     }
   }
-  if(fd == NULL)
-    f->eax =-1;
-  else 
+  if (fd == NULL)
+    f->eax = -1;
+  else
   {
     f->eax = file_length(fd->f);
   }
   lock_release(&memory_lock);
 }
-void
-sys_seek(int fd_, int cnt, struct intr_frame *f UNUSED)
+void sys_seek(int fd_, int cnt, struct intr_frame *f UNUSED)
 {
   struct list_elem *e;
-  struct filedesc *fd=NULL;
+  struct filedesc *fd = NULL;
   struct thread *cur = thread_current();
-  if(!list_empty(&cur->file_list))
+  if (!list_empty(&cur->file_list))
   {
     lock_acquire(&memory_lock);
-    for(e=list_front(&cur->file_list); e != list_end(&cur->file_list) ; e=list_next(e))
+    for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
     {
       fd = list_entry(e, struct filedesc, elem);
-      if(fd->fd_num == fd_)
-       break;
-      if(e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
+      if (fd->fd_num == fd_)
+        break;
+      if (e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
       {
         lock_release(&memory_lock);
         return;
       }
     }
   }
-  if(fd->f != NULL)
+  if (fd->f != NULL)
   {
-    file_seek(fd->f,cnt);
+    file_seek(fd->f, cnt);
     lock_release(&memory_lock);
     return;
   }
   return;
 }
-void 
-sys_tell(int fd_,struct intr_frame *f)
+void sys_tell(int fd_, struct intr_frame *f)
 {
   struct list_elem *e;
-  struct filedesc *fd=NULL;
+  struct filedesc *fd = NULL;
   struct thread *cur = thread_current();
   lock_acquire(&memory_lock);
-  if(!list_empty(&cur->file_list))
+  if (!list_empty(&cur->file_list))
   {
-    for(e=list_front(&cur->file_list); e != list_end(&cur->file_list) ; e=list_next(e))
+    for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
     {
       fd = list_entry(e, struct filedesc, elem);
-      if(fd->fd_num == fd_)
-       break;
-      if(e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
+      if (fd->fd_num == fd_)
+        break;
+      if (e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
       {
-        f->eax=-1;
+        f->eax = -1;
         lock_release(&memory_lock);
         return;
       }
     }
   }
-  if(fd->f != NULL)
+  if (fd->f != NULL)
   {
-    f->eax=file_tell(fd->f);
+    f->eax = file_tell(fd->f);
     lock_release(&memory_lock);
     return;
   }
-  f->eax=-1;
+  f->eax = -1;
   lock_release(&memory_lock);
 }
-void
-sys_remove(char *name, struct intr_frame *f)
+void sys_remove(char *name, struct intr_frame *f)
 {
-  check_memory(name,sizeof(name));
+  check_memory(name, sizeof(name));
   lock_acquire(&memory_lock);
   f->eax = filesys_remove(name);
   lock_release(&memory_lock);
