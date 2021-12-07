@@ -174,7 +174,6 @@ void sys_create(char *name, size_t size, struct intr_frame *f)
 }
 void sys_open(char *name, struct intr_frame *f)
 {
-
   struct file *open = NULL;
   struct filedesc *fd;
   check_memory(name, sizeof(name));
@@ -225,19 +224,14 @@ void sys_close(int fd_, struct intr_frame *f UNUSED)
     {
       lock_release(&memory_lock);
       file_close(fd->f);
-      list_remove(&(fd->elem));
+      list_remove(&fd->elem);
       palloc_free_page(fd);
     }
   }
 }
 void sys_write(int fd_, void *buffer, int size, struct intr_frame *f)
 {
-  if (buffer == NULL)
-    sys_exit(-1, NULL);
   check_memory(buffer, sizeof(buffer));
-  if (!check_validate(buffer) || !check_validate(buffer + size))
-    sys_exit(-1, NULL);
-
   lock_acquire(&memory_lock);
   if (fd_ == STDOUT)
   {
@@ -288,14 +282,7 @@ void sys_read(int fd_, void *buffer, int size, struct intr_frame *f)
 {
   unsigned i;
   check_memory(buffer, sizeof(buffer));
-  check_memory(buffer, sizeof(buffer) + size - 1);
   lock_acquire(&memory_lock);
-  if (fd_ <= 2 || fd_ > fd_num)
-  {
-    f->eax = -1;
-    lock_release(&memory_lock);
-    return;
-  }
   if (fd_ == STDIN)
   {
     for (i = 0; i < (unsigned)size; i++)
@@ -337,7 +324,7 @@ void sys_read(int fd_, void *buffer, int size, struct intr_frame *f)
 static int
 get_user(const uint8_t *uaddr)
 {
-  if (check_validate)
+  if (check_validate(uaddr))
   {
     int result;
     asm("movl $1f, %0; movzbl %1, %0; 1:"
@@ -350,7 +337,7 @@ get_user(const uint8_t *uaddr)
 static bool
 put_user(uint8_t *udst, uint8_t byte)
 {
-  if (check_validate)
+  if (check_validate(udst))
   {
     int error_code;
     asm("movl $1f, %0; movb %b2, %1; 1:"
