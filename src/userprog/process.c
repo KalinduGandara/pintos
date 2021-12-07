@@ -99,7 +99,6 @@ start_process(void *file_name_)
   int len;
   int args_addr[count];
   void **esp = &if_.esp;
-  // for (int i = 0; i < count; i++)
   for (int i = count - 1; i >= 0; i--)
   {
     len = strlen(args[i]) + 1;

@@ -215,7 +215,7 @@ void sys_open(char *name, struct intr_frame *f)
     fd->f = open;
     fd->fd_num = ++fd_num;
     fd->master = thread_current();
-    list_push_back(&(thread_current()->file_list), &(fd->elem));
+    list_push_back(&thread_current()->file_list, &(fd->elem));
     f->eax = fd->fd_num;
     lock_release(&memory_lock);
     return;
@@ -243,7 +243,7 @@ void sys_close(int fd_, struct intr_frame *f UNUSED)
       lock_release(&memory_lock);
       return;
     }
-    if (cur->tid == fd->master->tid) // check master thread.
+    if (cur->tid == fd->master->tid)
     {
       lock_release(&memory_lock);
       file_close(fd->f);
