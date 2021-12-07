@@ -36,6 +36,8 @@ void sys_wait(int tid, struct intr_frame *f);
 void sys_create(char *name, size_t size, struct intr_frame *f);
 void sys_open(char * name, struct intr_frame *f);
 void sys_close(int fd_, struct intr_frame *f);
+
+
 void syscall_init(void)
 {
   lock_init(&memory_lock);
@@ -48,34 +50,23 @@ syscall_handler(struct intr_frame *f)
   int syscall_number;
 
   void *esp = f->esp;
-  if (!check_validate(esp) && !check_validate(esp+4) && ! check_validate(esp+8) && !check_validate(esp+12))
-  {
-    sys_exit(-1, NULL);
-  }
   read_mem(&syscall_number, esp, sizeof(syscall_number));
-  int fd, size;
-  void *buffer;
 
   switch (syscall_number)
   {
   case SYS_READ:
   {
     int fd, size;
-      void *buffer;
-      read_mem(&fd,esp+4,sizeof(fd));
-      read_mem(&buffer, esp+8, sizeof(fd));
-      read_mem(&size, esp+12, sizeof(fd));
-      sys_read(fd,buffer,size,f);
-      break;
+    void *buffer;
+    read_mem(&fd,esp+4,sizeof(fd));
+    read_mem(&buffer, esp+8, sizeof(fd));
+    read_mem(&size, esp+12, sizeof(fd));
+    sys_read(fd,buffer,size,f);
+    break;
   }
   case SYS_EXIT:
   {
-    // sema_up(&thread_current()->tcb->parent->wait);
     int exit_code;
-    if (!check_validate(esp+4))
-    {
-      sys_exit(-1, NULL);
-    }
     read_mem(&exit_code, esp + 4, sizeof(exit_code));
     sys_exit(exit_code, f);
     break;
@@ -101,7 +92,6 @@ syscall_handler(struct intr_frame *f)
     read_mem(&cmd, esp+4, sizeof(cmd));
     sys_exec(cmd,f);
     break;
-
   }
   case SYS_WAIT:
   {
@@ -119,7 +109,6 @@ syscall_handler(struct intr_frame *f)
     sys_create(name,size,f);
     break;
   }
-  case SYS_REMOVE:{}
   case SYS_OPEN:
   {
     char *name;
@@ -127,9 +116,6 @@ syscall_handler(struct intr_frame *f)
     sys_open(name,f);
     break;
   }
-  case SYS_FILESIZE:{}
-  case SYS_SEEK:{}
-  case SYS_TELL:{}
   case SYS_CLOSE:
   {
     int fd;
@@ -137,7 +123,10 @@ syscall_handler(struct intr_frame *f)
     sys_close(fd,f);
     break;
   }
-
+  case SYS_REMOVE:{}
+  case SYS_FILESIZE:{}
+  case SYS_SEEK:{}
+  case SYS_TELL:{}
   default:
     {
       int exit_code;
@@ -148,34 +137,16 @@ syscall_handler(struct intr_frame *f)
 }
 void sys_exit(int exit_code, struct intr_frame *f UNUSED)
 {
+  struct tcb * tcb = thread_current()->tcb;
   printf("%s: exit(%d)\n", thread_current()->name, exit_code);
-  thread_current()->tcb->exit_code = exit_code;
-  sema_up(&thread_current()->tcb->parent->wait);
+  if (tcb)
+  {
+    tcb->exit_code = exit_code;
+    sema_up(&tcb->parent->wait);
+  }
   thread_exit();
 }
-int read_mem(void *dest, void *src, size_t size)
-{
-  size_t i;
-  int value;
-  check_memory(src,size);
-  for (i = 0; i < size; i++)
-  {
-    value = get_user(src + i);
-    if (value == -1)
-      return -1;
-    *(uint8_t *)(dest + i) = value;
-  }
-  return value;
-}
-static int
-get_user(const uint8_t *uaddr)
-{
-  int result;
-  asm("movl $1f, %0; movzbl %1, %0; 1:"
-      : "=&a"(result)
-      : "m"(*uaddr));
-  return result;
-}
+
 void
 sys_exec(char *cmd, struct intr_frame *f)
 {
@@ -363,6 +334,19 @@ sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
     lock_release(&memory_lock);    
   }
 }
+static int
+get_user(const uint8_t *uaddr)
+{
+  if (check_validate)
+  {
+  int result;
+  asm("movl $1f, %0; movzbl %1, %0; 1:"
+      : "=&a"(result)
+      : "m"(*uaddr));
+  return result;
+  }
+  sys_exit(-1,NULL);
+}
 static bool
 put_user (uint8_t *udst, uint8_t byte)
 {
@@ -375,6 +359,20 @@ put_user (uint8_t *udst, uint8_t byte)
   }
   sys_exit(-1,NULL);
 }
+int read_mem(void *dest, void *src, size_t size)
+{
+  size_t i;
+  int value;
+  check_memory(src,size);
+  for (i = 0; i < size; i++)
+  {
+    value = get_user(src + i);
+    if (value == -1)
+      return -1;
+    *(uint8_t *)(dest + i) = value;
+  }
+  return value;
+}
 void check_memory(void * addr, size_t size)
 {
   unsigned i;
@@ -382,23 +380,15 @@ void check_memory(void * addr, size_t size)
   for(i=0; i<size; i++)
   {
     if(!check_validate((void *)(_cmd+i)))
-    {
       sys_exit(-1,NULL);
-    }
   }
 }
 bool check_validate(void *addr)
 {
   if((addr != NULL) && is_user_vaddr(addr))
   {
-    if((pagedir_get_page(thread_current()->pagedir, addr)) != NULL)
-    {
-      return true;
-    }
-    else
-    {
-      return false;
-    }
+    if((pagedir_get_page(thread_current()->pagedir, addr)) != NULL) return true;
+    else return false;
   }
   return false;
 }
