@@ -224,21 +224,24 @@ void sys_open(char *name, struct intr_frame *f)
 void sys_close(int fd_, struct intr_frame *f UNUSED)
 {
   struct list_elem *e;
-  struct filedesc *fd;
+  struct filedesc *fd = NULL, *fd_tmp = NULL;
   struct thread *cur = thread_current();
   if (!list_empty(&cur->file_list))
   {
     lock_acquire(&memory_lock);
     for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
     {
-      fd = list_entry(e, struct filedesc, elem);
-      if (fd->fd_num == fd_)
-        break;
-      if (e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
+      fd_tmp = list_entry(e, struct filedesc, elem);
+      if (fd_tmp->fd_num == fd_)
       {
-        lock_release(&memory_lock);
-        return;
+        fd = fd_tmp;
+        break;
       }
+    }
+    if (fd == NULL)
+    {
+      lock_release(&memory_lock);
+      return;
     }
     if (cur->tid == fd->master->tid) // check master thread.
     {
@@ -268,20 +271,17 @@ void sys_write(int fd_, void *buffer, int size, struct intr_frame *f)
   else
   {
     struct list_elem *e;
-    struct filedesc *fd = NULL;
+    struct filedesc *fd = NULL, *fd_tmp = NULL;
     struct thread *cur = thread_current();
     if (!list_empty(&cur->file_list))
     {
       for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
       {
-        fd = list_entry(e, struct filedesc, elem);
-        if (fd->fd_num == fd_)
-          break;
-        if (e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
+        fd_tmp = list_entry(e, struct filedesc, elem);
+        if (fd_tmp->fd_num == fd_)
         {
-          lock_release(&memory_lock);
-          f->eax = -1;
-          return;
+          fd = fd_tmp;
+          break;
         }
       }
     }
@@ -289,13 +289,11 @@ void sys_write(int fd_, void *buffer, int size, struct intr_frame *f)
     {
       f->eax = file_write(fd->f, buffer, size);
       lock_release(&memory_lock);
-      return;
     }
     else
     {
       lock_release(&memory_lock);
       f->eax = -1;
-      return;
     }
   }
 }
@@ -320,77 +318,78 @@ void sys_read(int fd_, void *buffer, int size, struct intr_frame *f)
   else
   {
     struct list_elem *e;
-    struct filedesc *fd;
+    struct filedesc *fd = NULL, *fd_tmp = NULL;
     struct thread *cur = thread_current();
     if (!list_empty(&cur->file_list))
     {
       for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
       {
-        fd = list_entry(e, struct filedesc, elem);
-        if (fd->fd_num == fd_)
-          break;
-        if (e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
+        fd_tmp = list_entry(e, struct filedesc, elem);
+        if (fd_tmp->fd_num == fd_)
         {
-          lock_release(&memory_lock);
-          f->eax = -1;
-          return;
+          fd = fd_tmp;
+          break;
         }
       }
-      f->eax = file_read(fd->f, buffer, size);
-      lock_release(&memory_lock);
-      return;
+      if (fd != NULL)
+      {
+        f->eax = file_read(fd->f, buffer, size);
+        lock_release(&memory_lock);
+      }
+      else
+      {
+        lock_release(&memory_lock);
+        f->eax = -1;
+      }
     }
-    lock_release(&memory_lock);
   }
 }
 void sys_filesize(int fd_, struct intr_frame *f)
 {
   struct list_elem *e;
-  struct filedesc *fd = NULL;
+  struct filedesc *fd = NULL, *fd_tmp = NULL;
   struct thread *cur = thread_current();
   if (!list_empty(&cur->file_list))
   {
     lock_acquire(&memory_lock);
     for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
     {
-      fd = list_entry(e, struct filedesc, elem);
-      if (fd->fd_num == fd_)
-        break;
-      if (e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
+      fd_tmp = list_entry(e, struct filedesc, elem);
+      if (fd_tmp->fd_num == fd_)
       {
-        lock_release(&memory_lock);
-        f->eax = -1;
-        return;
+        fd = fd_tmp;
+        break;
       }
     }
   }
   if (fd == NULL)
     f->eax = -1;
   else
-  {
     f->eax = file_length(fd->f);
-  }
   lock_release(&memory_lock);
 }
 void sys_seek(int fd_, int cnt, struct intr_frame *f UNUSED)
 {
   struct list_elem *e;
-  struct filedesc *fd = NULL;
+  struct filedesc *fd = NULL, *fd_tmp = NULL;
   struct thread *cur = thread_current();
   if (!list_empty(&cur->file_list))
   {
     lock_acquire(&memory_lock);
     for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
     {
-      fd = list_entry(e, struct filedesc, elem);
-      if (fd->fd_num == fd_)
-        break;
-      if (e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
+      fd_tmp = list_entry(e, struct filedesc, elem);
+      if (fd_tmp->fd_num == fd_)
       {
-        lock_release(&memory_lock);
-        return;
+        fd = fd_tmp;
+        break;
       }
     }
+  }
+  if (fd == NULL)
+  {
+    lock_release(&memory_lock);
+    return;
   }
   if (fd->f != NULL)
   {
@@ -398,28 +397,30 @@ void sys_seek(int fd_, int cnt, struct intr_frame *f UNUSED)
     lock_release(&memory_lock);
     return;
   }
-  return;
 }
 void sys_tell(int fd_, struct intr_frame *f)
 {
   struct list_elem *e;
-  struct filedesc *fd = NULL;
+  struct filedesc *fd = NULL, *fd_tmp = NULL;
   struct thread *cur = thread_current();
   lock_acquire(&memory_lock);
   if (!list_empty(&cur->file_list))
   {
     for (e = list_front(&cur->file_list); e != list_end(&cur->file_list); e = list_next(e))
     {
-      fd = list_entry(e, struct filedesc, elem);
-      if (fd->fd_num == fd_)
-        break;
-      if (e == list_tail(&cur->file_list) && (fd->fd_num != fd_))
+      fd_tmp = list_entry(e, struct filedesc, elem);
+      if (fd_tmp->fd_num == fd_)
       {
-        f->eax = -1;
-        lock_release(&memory_lock);
-        return;
+        fd = fd_tmp;
+        break;
       }
     }
+  }
+  if (fd == NULL)
+  {
+    f->eax = -1;
+    lock_release(&memory_lock);
+    return;
   }
   if (fd->f != NULL)
   {
