@@ -163,6 +163,7 @@ int process_wait(tid_t child_tid UNUSED)
     if (tcb->tid == child_tid && tcb->parent == cur)
     {
       child = tcb->owner;
+      break;
     }
   }
   if (child == NULL)
@@ -186,6 +187,7 @@ int process_wait(tid_t child_tid UNUSED)
     sema_down(&cur->wait);
   }
   child_tcb->isWait = true;
+  list_remove(e);
   return child_tcb->exit_code;
 }
 

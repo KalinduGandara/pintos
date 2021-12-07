@@ -28,6 +28,7 @@ int read_mem(void *dest, void *src, size_t size);
 void check_memory(void *addr, size_t size);
 bool check_validate(void *addr);
 
+void sys_exit(int exit_code, struct intr_frame *f);
 void sys_write(int fd_, void *buffer, int size, struct intr_frame *f);
 void sys_read(int fd_, void *buffer, int size, struct intr_frame *f);
 void sys_exec(char *cmd, struct intr_frame *f);
@@ -36,7 +37,7 @@ void sys_create(char *name, size_t size, struct intr_frame *f);
 void sys_open(char *name, struct intr_frame *f);
 void sys_close(int fd_, struct intr_frame *f);
 void sys_filesize(int fd_, struct intr_frame *f);
-void sys_seek(int fd_, int cnt, struct intr_frame *f UNUSED);
+void sys_seek(int fd_, int cnt, struct intr_frame *f);
 void sys_tell(int fd_, struct intr_frame *f);
 void sys_remove(char *name, struct intr_frame *f);
 void syscall_init(void)
@@ -168,6 +169,7 @@ void sys_exit(int exit_code, struct intr_frame *f UNUSED)
   if (tcb)
   {
     tcb->exit_code = exit_code;
+    tcb->isExit = true;
     sema_up(&tcb->parent->wait);
   }
   thread_exit();
