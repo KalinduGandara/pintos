@@ -81,6 +81,25 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+
+struct tcb
+{
+   tid_t tid;
+   bool isExit;
+   bool isWait;
+   int exit_code;
+   struct list children;
+   struct thread *parent;
+   struct thread *owner;
+   struct list_elem childelem;
+};
+struct filedesc
+{
+  int fd_num;
+  struct file * f;
+  struct thread * master;
+  struct list_elem elem;
+};
 struct thread
   {
     /* Owned by thread.c. */
@@ -94,13 +113,16 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-// #ifdef USERPROG
+#ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    struct thread *child;
-    struct thread *parent;
+    struct tcb *tcb;
+    struct list child_list;
     struct semaphore wait;
-// #endif
+    struct semaphore exac_wait;
+    struct list file_list;
+    struct file *current_file;
+#endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

@@ -29,32 +29,47 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  char *fn_copy,*name;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  name = palloc_get_page (0);
+  if (fn_copy == NULL || name == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (name, file_name, PGSIZE);
+
+  /*tcb initialization*/
+  struct tcb* tcb;
+  tcb = palloc_get_page(PAL_USER);
+  tcb->isExit = false;
+  tcb->isWait = false;
+  tcb->parent = NULL;
+  tcb->exit_code = -1;
 
   /*get file name*/
-  char *name, *save_ptr;
-  name = strtok_r(file_name, " ", &save_ptr);
-
+  char *save_ptr;
+  name = strtok_r(name, " ", &save_ptr);
+  strlcpy (fn_copy, file_name, PGSIZE);
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+    palloc_free_page (name); 
 
     /*add new thread to parent thread's child*/
     struct thread *child = find_by_tid(tid);
     struct thread *cur = thread_current();
-    sema_init(&cur->wait,0);
-    cur->child = child;
-    child->parent = cur;
-  return tid;
+    tcb->tid = tid;
+    tcb->owner = child;
+    child->tcb = tcb;
+    list_push_back(&cur->child_list,&child->tcb->childelem);  
+    child->tcb->parent = cur;
+    child->tcb->isWait = false;
+    sema_down(&cur->exac_wait);
+  return tid;  
 }
 
 /* A thread function that loads a user process and starts it
@@ -108,12 +123,12 @@ start_process (void *file_name_)
   *esp -= 4;
   *(int*)*esp = 0;
   /* If load failed, quit. */
-  // hex_dump(if_.esp , if_.esp , PHYS_BASE-if_.esp , true);
-  // printf("esp - %p",if_.esp);
-
   palloc_free_page (file_name);
+
+  struct thread * cur = thread_current();
+  sema_up(&cur->tcb->parent->exac_wait);
   if (!success) 
-    thread_exit ();
+    sys_exit(-1,NULL); 
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -137,13 +152,39 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  // for (size_t i = 0; i < 100000000000; i++){}
   struct thread *cur = thread_current();
-  struct thread *child = cur->child;
+  struct thread *child = NULL;
+  struct list_elem *e;
+  struct tcb *tcb;
+  for (e = list_begin (&cur->child_list); e != list_end (&cur->child_list);e = list_next (e))
+    {
+      tcb = list_entry (e, struct tcb, childelem);
+      if (tcb->tid == child_tid && tcb->parent == cur)
+      {
+        child = tcb->owner;
+      }
+    }
+  if (child == NULL)
+  {
+    return -1;
+  }
+   
+  struct tcb *cur_tcb = cur->tcb;
+  struct tcb *child_tcb = tcb;
+  if (child_tcb->parent != cur) 
+  {
+      return -1;
+  }
+  if (child_tcb->isWait)
+  {
+    return -1;
+  }
+  
   if (child->status != THREAD_DYING){
     sema_down(&cur->wait);
   }
-  return -1;
+  child_tcb->isWait = true;
+  return child_tcb->exit_code;
 }
 
 /* Free the current process's resources. */
